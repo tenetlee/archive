@@ -12,7 +12,6 @@ import {
 interface FolderCardProps {
   label: string;
   href: string;
-  index: number;
   childCount?: number;
 }
 
@@ -65,7 +64,6 @@ function paperCount(childCount: number): number {
 export function FolderCard({
   label,
   href,
-  index,
   childCount = 0,
 }: FolderCardProps) {
   const papers = paperCount(childCount);

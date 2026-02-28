@@ -1,7 +1,6 @@
 "use client";
 
 import { motion } from "motion/react";
-import { MarkdownRenderer } from "./markdown-renderer";
 import { CollapsibleMarkdown } from "./collapsible-markdown";
 import { TableOfContents } from "./table-of-contents";
 

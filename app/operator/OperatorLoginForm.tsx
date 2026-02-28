@@ -20,8 +20,8 @@ export function OperatorLoginForm() {
         action={formAction}
         className="w-full max-w-sm border border-border bg-surface p-6"
       >
-        <h1 className="mb-4 text-xl font-medium text-foreground">
-          Operator access
+        <h1 className="mb-4 flex items-baseline gap-2 text-xl font-normal tracking-tight text-foreground" style={{ fontFamily: "var(--font-title)"}}>
+		Operator Access
         </h1>
         <p className="mb-4 text-sm text-muted">
           Enter the operator password to view uncached content.

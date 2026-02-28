@@ -11,12 +11,11 @@ interface FolderItem {
 export function FolderGrid({ items }: { items: FolderItem[] }) {
   return (
     <div className="flex flex-wrap gap-8 p-8">
-      {items.map((item, i) => (
+      {items.map((item) => (
         <FolderCard
           key={item.name}
           label={item.name}
           href={item.href}
-          index={i}
           childCount={item.childCount}
         />
       ))}

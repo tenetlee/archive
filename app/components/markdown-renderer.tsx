@@ -5,7 +5,6 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import rehypeSlug from "rehype-slug";
-import rehypeRaw from "rehype-raw";
 import type { Components } from "react-markdown";
 
 interface MarkdownRendererProps {
@@ -193,8 +192,9 @@ export function MarkdownRenderer({
   return (
     <div className="prose-archive max-w-none">
       <ReactMarkdown
+        skipHtml
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex, rehypeSlug, rehypeRaw]}
+        rehypePlugins={[rehypeKatex, rehypeSlug]}
         components={components}
       >
         {content}

@@ -9,15 +9,26 @@ interface Breadcrumb {
   href?: string;
 }
 
-export function Header({ breadcrumbs }: { breadcrumbs?: Breadcrumb[] }) {
+function formatLabel(label: string) {
+  return label.toLocaleUpperCase();
+}
+
+export function Header({
+  breadcrumbs,
+  showPath = true,
+}: {
+  breadcrumbs?: Breadcrumb[];
+  showPath?: boolean;
+}) {
   const { theme, toggle } = useTheme();
+  const crumbs = breadcrumbs ?? [];
 
   const archiveSrc = theme === "dark" ? "/archive-white.png" : "/archive.png";
   const tenetSrc = theme === "dark" ? "/tenet-white.png" : "/tenet.png";
   const iconSrc = theme === "dark" ? "/archive-icon-white.png" : "/archive-icon.png";
 
-  const lastCrumbLabel = breadcrumbs?.length
-    ? breadcrumbs[breadcrumbs.length - 1]?.label
+  const lastCrumbLabel = crumbs.length
+    ? formatLabel(crumbs[crumbs.length - 1]?.label ?? "")
     : null;
 
   return (
@@ -52,38 +63,47 @@ export function Header({ breadcrumbs }: { breadcrumbs?: Breadcrumb[] }) {
       </Link>
 
       <nav className="flex min-w-0 items-center justify-center gap-2 text-sm text-muted">
-        {/* Full path — ARCHIVE always shown, then optional breadcrumbs */}
-        <div className="hidden gap-2 md:flex md:items-center -ml-20">
-          <Link href="/" className="transition-colors hover:text-foreground">
-            ARCHIVE
-          </Link>
-          {breadcrumbs?.map((crumb, i) => (
-            <span key={i} className="flex items-center gap-2">
-              <span>/</span>
-              {crumb.href ? (
-                <Link
-                  href={crumb.href}
-                  className="transition-colors hover:text-foreground"
+        {showPath && (
+          <>
+            {/* Full path — ARCHIVE always shown, then optional breadcrumbs */}
+            <div className="hidden gap-2 -ml-20 md:flex md:items-center">
+              <Link href="/" className="transition-colors hover:text-foreground">
+                ARCHIVE
+              </Link>
+              {crumbs.map((crumb, i) => (
+                <span
+                  key={`${crumb.href ?? "current"}-${crumb.label}-${i}`}
+                  className="flex items-center gap-2"
                 >
-                  {crumb.label}
-                </Link>
+                  <span>/</span>
+                  {crumb.href ? (
+                    <Link
+                      href={crumb.href}
+                      className="transition-colors hover:text-foreground"
+                    >
+                      {formatLabel(crumb.label)}
+                    </Link>
+                  ) : (
+                    <span className="text-foreground">
+                      {formatLabel(crumb.label)}
+                    </span>
+                  )}
+                </span>
+              ))}
+            </div>
+            {/* Truncated path — visible below md */}
+            <div className="truncate md:hidden">
+              {lastCrumbLabel != null ? (
+                <>
+                  <span className="text-muted">…/</span>
+                  <span className="text-foreground">{lastCrumbLabel}</span>
+                </>
               ) : (
-                <span className="text-foreground">{crumb.label}</span>
+                <span className="text-foreground">ARCHIVE</span>
               )}
-            </span>
-          ))}
-        </div>
-        {/* Truncated path — visible below md */}
-        <div className="truncate md:hidden">
-          {lastCrumbLabel != null ? (
-            <>
-              <span className="text-muted">…/</span>
-              <span className="text-foreground">{lastCrumbLabel}</span>
-            </>
-          ) : (
-            <span className="text-foreground">ARCHIVE</span>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </nav>
 
       <button

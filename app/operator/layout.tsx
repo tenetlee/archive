@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { isOperatorAuthenticated } from "@/lib/operator-auth";
 import { Header } from "../components/header";
 import { OperatorHeader } from "./OperatorHeader";
@@ -11,7 +12,7 @@ export default async function OperatorLayout({
   if (!authenticated) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
+        <Header showPath={false} />
         <OperatorLoginForm />
       </div>
     );
@@ -24,9 +25,9 @@ export default async function OperatorLayout({
         <span className="font-medium text-foreground">Operator mode</span>
         {" — "}
         uncached data from GitHub.{" "}
-        <a href="/operator/logout" className="underline hover:text-foreground">
+        <Link href="/operator/logout" className="underline hover:text-foreground">
           Sign out
-        </a>
+        </Link>
       </div>
       {children}
     </div>

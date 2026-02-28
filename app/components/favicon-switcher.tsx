@@ -3,19 +3,16 @@
 import { useEffect } from "react";
 import { useTheme } from "./theme-provider";
 
+const FAVICON_LIGHT = "/archive-icon.png?v=2";
+const FAVICON_DARK = "/archive-icon-white.png?v=2";
+
 export function FaviconSwitcher() {
   const { theme } = useTheme();
 
   useEffect(() => {
-    const link =
-      document.querySelector<HTMLLinkElement>('link[rel="icon"]') ??
-      (() => {
-        const el = document.createElement("link");
-        el.rel = "icon";
-        document.head.appendChild(el);
-        return el;
-      })();
-    link.href = theme === "dark" ? "/archive-icon-white.png" : "/archive-icon.png";
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!link) return;
+    link.href = theme === "dark" ? FAVICON_DARK : FAVICON_LIGHT;
   }, [theme]);
 
   return null;

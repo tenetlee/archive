@@ -2,7 +2,7 @@
 @import "katex/dist/katex.min.css";
 
 :root {
-  --font-title: "Allkin", serif;
+  --font-title: "Allkin", "Instrument Serif", serif;
   --font-subtitle: "Instrument Serif", serif;
   --font-body: "Poppins", sans-serif;
 

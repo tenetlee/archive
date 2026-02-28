@@ -16,16 +16,27 @@ function headers(): HeadersInit {
 
 const REVALIDATE = 3600;
 
+export type FetchOptions = { noCache?: boolean };
+
+function fetchOptions(opts?: FetchOptions): RequestInit {
+  if (opts?.noCache) {
+    return { cache: "no-store" as RequestCache };
+  }
+  return { next: { revalidate: REVALIDATE } };
+}
+
 export interface GitHubEntry {
   name: string;
   path: string;
   type: "file" | "dir";
 }
 
-export async function getCategories(): Promise<GitHubEntry[]> {
+export async function getCategories(
+  opts?: FetchOptions
+): Promise<GitHubEntry[]> {
   const res = await fetch(`${API_BASE}/contents/`, {
     headers: headers(),
-    next: { revalidate: REVALIDATE },
+    ...fetchOptions(opts),
   });
 
   if (!res.ok) return [];
@@ -34,12 +45,15 @@ export async function getCategories(): Promise<GitHubEntry[]> {
   return data.filter((e) => e.type === "dir");
 }
 
-export async function getCourses(category: string): Promise<GitHubEntry[]> {
+export async function getCourses(
+  category: string,
+  opts?: FetchOptions
+): Promise<GitHubEntry[]> {
   const res = await fetch(
     `${API_BASE}/contents/${encodeURIComponent(category)}`,
     {
       headers: headers(),
-      next: { revalidate: REVALIDATE },
+      ...fetchOptions(opts),
     }
   );
 
@@ -58,7 +72,8 @@ export interface Article {
 
 export async function getArticle(
   category: string,
-  course: string
+  course: string,
+  opts?: FetchOptions
 ): Promise<Article | null> {
   const filePath = `${category}/${course}/notes.md`;
   const res = await fetch(`${API_BASE}/contents/${encodeURI(filePath)}`, {
@@ -66,7 +81,7 @@ export async function getArticle(
       ...headers(),
       Accept: "application/vnd.github.v3.raw",
     },
-    next: { revalidate: REVALIDATE },
+    ...fetchOptions(opts),
   });
 
   if (!res.ok) return null;
@@ -117,7 +132,10 @@ export async function getArticle(
   return { title, prerequisites, content, rawPath };
 }
 
-export async function getArticleTitle(filepath: string): Promise<string> {
+export async function getArticleTitle(
+  filepath: string,
+  opts?: FetchOptions
+): Promise<string> {
   const parts = filepath.replace(/^\//, "").split("/");
   const folderName = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
 
@@ -130,7 +148,7 @@ export async function getArticleTitle(filepath: string): Promise<string> {
       ...headers(),
       Accept: "application/vnd.github.v3.raw",
     },
-    next: { revalidate: REVALIDATE },
+    ...fetchOptions(opts),
   });
 
   if (!res.ok) return folderName;

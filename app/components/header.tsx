@@ -51,42 +51,40 @@ export function Header({ breadcrumbs }: { breadcrumbs?: Breadcrumb[] }) {
         />
       </Link>
 
-      {breadcrumbs && breadcrumbs.length > 0 ? (
-        <nav className="flex min-w-0 items-center justify-center gap-2 text-sm text-muted">
-          {/* Full path — visible from md up */}
-          <div className="hidden gap-2 md:flex md:items-center -ml-20">
-            <Link href="/" className="transition-colors hover:text-foreground">
-              ARCHIVE
-            </Link>
-            {breadcrumbs.map((crumb, i) => (
-              <span key={i} className="flex items-center gap-2">
-                <span>/</span>
-                {crumb.href ? (
-                  <Link
-                    href={crumb.href}
-                    className="transition-colors hover:text-foreground"
-                  >
-                    {crumb.label}
-                  </Link>
-                ) : (
-                  <span className="text-foreground">{crumb.label}</span>
-                )}
-              </span>
-            ))}
-          </div>
-          {/* Truncated path — visible below md */}
-          <div className="truncate md:hidden">
-            {lastCrumbLabel != null ? (
-              <>
-                <span className="text-muted">…/</span>
-                <span className="text-foreground">{lastCrumbLabel}</span>
-              </>
-            ) : null}
-          </div>
-        </nav>
-      ) : (
-        <div />
-      )}
+      <nav className="flex min-w-0 items-center justify-center gap-2 text-sm text-muted">
+        {/* Full path — ARCHIVE always shown, then optional breadcrumbs */}
+        <div className="hidden gap-2 md:flex md:items-center -ml-20">
+          <Link href="/" className="transition-colors hover:text-foreground">
+            ARCHIVE
+          </Link>
+          {breadcrumbs?.map((crumb, i) => (
+            <span key={i} className="flex items-center gap-2">
+              <span>/</span>
+              {crumb.href ? (
+                <Link
+                  href={crumb.href}
+                  className="transition-colors hover:text-foreground"
+                >
+                  {crumb.label}
+                </Link>
+              ) : (
+                <span className="text-foreground">{crumb.label}</span>
+              )}
+            </span>
+          ))}
+        </div>
+        {/* Truncated path — visible below md */}
+        <div className="truncate md:hidden">
+          {lastCrumbLabel != null ? (
+            <>
+              <span className="text-muted">…/</span>
+              <span className="text-foreground">{lastCrumbLabel}</span>
+            </>
+          ) : (
+            <span className="text-foreground">ARCHIVE</span>
+          )}
+        </div>
+      </nav>
 
       <button
         onClick={toggle}

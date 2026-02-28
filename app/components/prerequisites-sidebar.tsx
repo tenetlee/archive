@@ -3,17 +3,21 @@ import { getArticleTitle, prerequisiteToRoute } from "@/lib/github";
 
 interface PrerequisitesSidebarProps {
   prerequisites: string[];
+  noCache?: boolean;
+  basePath?: string;
 }
 
 export async function PrerequisitesSidebar({
   prerequisites,
+  noCache,
+  basePath = "",
 }: PrerequisitesSidebarProps) {
   if (prerequisites.length === 0) return null;
 
   const resolved = await Promise.all(
     prerequisites.map(async (filepath) => {
-      const title = await getArticleTitle(filepath);
-      const route = prerequisiteToRoute(filepath);
+      const title = await getArticleTitle(filepath, noCache ? { noCache: true } : undefined);
+      const route = basePath + prerequisiteToRoute(filepath);
       return { title, route, filepath };
     })
   );

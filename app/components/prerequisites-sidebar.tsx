@@ -16,14 +16,23 @@ export async function PrerequisitesSidebar({
 
   const resolved = await Promise.all(
     prerequisites.map(async (filepath) => {
-      const title = await getArticleTitle(filepath, noCache ? { noCache: true } : undefined);
+      const title = await getArticleTitle(
+        filepath,
+        noCache ? { noCache: true } : undefined
+      );
       const route = basePath + prerequisiteToRoute(filepath);
       return { title, route, filepath };
     })
   );
 
   return (
-    <div className="sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto">
+    <div
+      className="sticky overflow-y-auto"
+      style={{
+        maxHeight: "calc(100vh - var(--sticky-header-offset) - 2rem)",
+        top: "var(--sticky-header-offset)",
+      }}
+    >
       <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">
         Prerequisites
       </p>
@@ -32,8 +41,6 @@ export async function PrerequisitesSidebar({
           <li key={prereq.filepath}>
             <Link
               href={prereq.route}
-              target="_blank"
-              rel="noopener noreferrer"
               className="block border border-border bg-surface px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-alt"
             >
               {prereq.title}

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { FaviconSwitcher } from "./components/favicon-switcher";
 import { ThemeProvider } from "./components/theme-provider";
 import { Analytics } from "@vercel/analytics/next";
 
@@ -22,6 +23,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
         <ThemeProvider>
+          <FaviconSwitcher />
           {children}
           <Analytics />
         </ThemeProvider>

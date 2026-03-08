@@ -1,36 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-interface TocItem {
-  id: string;
-  text: string;
-  level: number;
-}
-
-function extractHeadings(markdown: string): TocItem[] {
-  const headings: TocItem[] = [];
-  const lines = markdown.split("\n");
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const match = line.match(/^(#{2,6})\s+(.+)$/);
-    if (match) {
-      const level = match[1].length;
-      const text = match[2].replace(/[*_`~\[\]]/g, "").trim();
-      const id = text
-        .toLowerCase()
-        .replace(/[^\w\s-]/g, "")
-        .replace(/\s+/g, "-");
-      headings.push({ id, text, level });
-    }
-  }
-
-  return headings;
-}
+import { parseArticleSections } from "@/lib/article-sections";
+import { useEffect, useMemo, useState } from "react";
 
 export function TableOfContents({ content }: { content: string }) {
-  const headings = extractHeadings(content);
+  const headings = useMemo(
+    () =>
+      parseArticleSections(content).sections.map((section) => ({
+        id: section.id,
+        text: section.title,
+      })),
+    [content]
+  );
   const [activeId, setActiveId] = useState("");
 
   useEffect(() => {
@@ -56,13 +37,19 @@ export function TableOfContents({ content }: { content: string }) {
   if (headings.length === 0) return null;
 
   return (
-    <nav className="sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto">
+    <nav
+      className="sticky overflow-y-auto"
+      style={{
+        maxHeight: "calc(100vh - var(--sticky-header-offset) - 2rem)",
+        top: "var(--sticky-header-offset)",
+      }}
+    >
       <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">
         On this page
       </p>
       <ul className="space-y-1">
         {headings.map((h) => (
-          <li key={h.id} style={{ paddingLeft: `${(h.level - 2) * 12}px` }}>
+          <li key={h.id}>
             <a
               href={`#${h.id}`}
               className={`block py-1 text-sm leading-5 transition-colors ${

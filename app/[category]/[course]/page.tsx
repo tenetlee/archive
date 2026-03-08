@@ -1,4 +1,9 @@
-import { getArticle } from "@/lib/github";
+import {
+  categorySlug,
+  getArticle,
+  getCategoryByRouteValue,
+  getCourseByRouteValue,
+} from "@/lib/github";
 import { Header } from "../../components/header";
 import { ArticleContent } from "../../components/article-content";
 import { PrerequisitesSidebar } from "../../components/prerequisites-sidebar";
@@ -10,10 +15,19 @@ interface Props {
 
 export default async function CoursePage({ params }: Props) {
   const { category, course } = await params;
-  const decodedCategory = decodeURIComponent(category);
-  const decodedCourse = decodeURIComponent(course);
+  const categoryEntry = await getCategoryByRouteValue(category);
 
-  const article = await getArticle(decodedCategory, decodedCourse);
+  if (!categoryEntry) {
+    notFound();
+  }
+
+  const courseEntry = await getCourseByRouteValue(categoryEntry.name, course);
+
+  if (!courseEntry) {
+    notFound();
+  }
+
+  const article = await getArticle(categoryEntry.name, courseEntry.name);
 
   if (!article) {
     notFound();
@@ -21,8 +35,8 @@ export default async function CoursePage({ params }: Props) {
 
   const breadcrumbs = [
     {
-      label: decodedCategory,
-      href: `/${encodeURIComponent(decodedCategory)}`,
+      label: categoryEntry.name,
+      href: `/${categorySlug(categoryEntry.name)}`,
     },
     { label: article.title },
   ];
@@ -43,7 +57,6 @@ export default async function CoursePage({ params }: Props) {
             imageBaseUrl={article.rawPath}
             mode="content"
             title={article.title}
-            contributeUrl="https://github.com/tenetlee/archive-legacy"
           />
         </main>
 

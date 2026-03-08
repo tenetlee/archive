@@ -1,7 +1,17 @@
+import {
+  normalizePrerequisitePath,
+  parseArticleDraft,
+} from "./article-draft";
+
 const REPO_OWNER = "tenetlee";
 const REPO_NAME = "archive-legacy";
 const API_BASE = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`;
 const RAW_BASE = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main`;
+const REVALIDATE = 3600;
+const collator = new Intl.Collator("en", {
+  numeric: true,
+  sensitivity: "base",
+});
 
 function headers(): HeadersInit {
   const token = process.env.GITHUB_TOKEN;
@@ -13,8 +23,6 @@ function headers(): HeadersInit {
   }
   return h;
 }
-
-const REVALIDATE = 3600;
 
 export type FetchOptions = { noCache?: boolean };
 
@@ -31,10 +39,44 @@ export interface GitHubEntry {
   type: "file" | "dir";
 }
 
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function repoPath(...segments: string[]): string {
+  return segments.map((segment) => encodeURIComponent(segment)).join("/");
+}
+
+function contentsUrl(...segments: string[]): string {
+  const path = segments.length > 0 ? `/${repoPath(...segments)}` : "";
+  return `${API_BASE}/contents${path}`;
+}
+
+function rawUrl(...segments: string[]): string {
+  const path = segments.length > 0 ? `/${repoPath(...segments)}` : "";
+  return `${RAW_BASE}${path}`;
+}
+
+function visibleDirectories(entries: GitHubEntry[]): GitHubEntry[] {
+  return entries
+    .filter((entry) => entry.type === "dir" && !entry.name.startsWith("."))
+    .sort((a, b) => collator.compare(a.name, b.name));
+}
+
+function routeValueMatches(name: string, value: string): boolean {
+  const decoded = safeDecode(value);
+  const slug = categorySlug(name);
+  return name === value || name === decoded || slug === value || slug === decoded;
+}
+
 export async function getCategories(
   opts?: FetchOptions
 ): Promise<GitHubEntry[]> {
-  const res = await fetch(`${API_BASE}/contents/`, {
+  const res = await fetch(contentsUrl(), {
     headers: headers(),
     ...fetchOptions(opts),
   });
@@ -42,25 +84,39 @@ export async function getCategories(
   if (!res.ok) return [];
 
   const data: GitHubEntry[] = await res.json();
-  return data.filter((e) => e.type === "dir");
+  return visibleDirectories(data);
 }
 
 export async function getCourses(
   category: string,
   opts?: FetchOptions
 ): Promise<GitHubEntry[]> {
-  const res = await fetch(
-    `${API_BASE}/contents/${encodeURIComponent(category)}`,
-    {
-      headers: headers(),
-      ...fetchOptions(opts),
-    }
-  );
+  const res = await fetch(contentsUrl(category), {
+    headers: headers(),
+    ...fetchOptions(opts),
+  });
 
   if (!res.ok) return [];
 
   const data: GitHubEntry[] = await res.json();
-  return data.filter((e) => e.type === "dir");
+  return visibleDirectories(data);
+}
+
+export async function getCategoryByRouteValue(
+  value: string,
+  opts?: FetchOptions
+): Promise<GitHubEntry | null> {
+  const categories = await getCategories(opts);
+  return categories.find((category) => routeValueMatches(category.name, value)) ?? null;
+}
+
+export async function getCourseByRouteValue(
+  category: string,
+  value: string,
+  opts?: FetchOptions
+): Promise<GitHubEntry | null> {
+  const courses = await getCourses(category, opts);
+  return courses.find((course) => routeValueMatches(course.name, value)) ?? null;
 }
 
 export interface Article {
@@ -75,8 +131,7 @@ export async function getArticle(
   course: string,
   opts?: FetchOptions
 ): Promise<Article | null> {
-  const filePath = `${category}/${course}/notes.md`;
-  const res = await fetch(`${API_BASE}/contents/${encodeURI(filePath)}`, {
+  const res = await fetch(contentsUrl(category, course, "notes.md"), {
     headers: {
       ...headers(),
       Accept: "application/vnd.github.v3.raw",
@@ -87,63 +142,26 @@ export async function getArticle(
   if (!res.ok) return null;
 
   const raw = await res.text();
-  const lines = raw.split("\n");
+  const parsed = parseArticleDraft(raw, course);
+  const rawPath = rawUrl(category, course);
 
-  let title = course;
-  let prerequisites: string[] = [];
-  let contentStart = 0;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    if (line.startsWith("#") && !title) {
-      title = line.replace(/^#+\s*/, "");
-      contentStart = i + 1;
-      continue;
-    }
-
-    if (line.startsWith("#")) {
-      title = line.replace(/^#+\s*/, "");
-      contentStart = i + 1;
-      continue;
-    }
-
-    if (line.toLowerCase().startsWith("prerequisites:")) {
-      const paths = line.replace(/^prerequisites:\s*/i, "");
-      prerequisites = paths
-        .split(",")
-        .map((p) => p.trim())
-        .filter(Boolean);
-      contentStart = i + 1;
-      continue;
-    }
-
-    if (line.trim() === "" && i <= contentStart) {
-      contentStart = i + 1;
-      continue;
-    }
-
-    break;
-  }
-
-  const content = lines.slice(contentStart).join("\n");
-  const rawPath = `${RAW_BASE}/${category}/${course}`;
-
-  return { title, prerequisites, content, rawPath };
+  return {
+    content: parsed.content,
+    prerequisites: parsed.prerequisites,
+    rawPath,
+    title: parsed.title,
+  };
 }
 
 export async function getArticleTitle(
   filepath: string,
   opts?: FetchOptions
 ): Promise<string> {
-  const parts = filepath.replace(/^\//, "").split("/");
-  const folderName = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+  const normalizedPath = normalizePrerequisitePath(filepath);
+  const parts = normalizedPath.split("/");
+  const folderName = parts.length >= 2 ? parts[parts.length - 1] : parts[0];
 
-  const fullPath = filepath.endsWith("notes.md")
-    ? filepath
-    : `${filepath}/notes.md`;
-
-  const res = await fetch(`${API_BASE}/contents/${encodeURI(fullPath)}`, {
+  const res = await fetch(contentsUrl(...parts, "notes.md"), {
     headers: {
       ...headers(),
       Accept: "application/vnd.github.v3.raw",
@@ -154,38 +172,21 @@ export async function getArticleTitle(
   if (!res.ok) return folderName;
 
   const raw = await res.text();
-  const firstLine = raw.split("\n").find((l) => l.startsWith("#"));
-  if (firstLine) {
-    return firstLine.replace(/^#+\s*/, "");
-  }
-
-  return folderName;
-}
-
-export function resolveImageUrl(
-  src: string,
-  category: string,
-  course: string
-): string {
-  if (src.startsWith("http://") || src.startsWith("https://")) {
-    return src;
-  }
-  return `${RAW_BASE}/${category}/${course}/${src}`;
+  return parseArticleDraft(raw, folderName).title;
 }
 
 export function courseSlug(name: string): string {
-  return encodeURIComponent(name);
+  return name.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
 export function categorySlug(name: string): string {
-  return encodeURIComponent(name);
+  return name.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
 export function prerequisiteToRoute(filepath: string): string {
-  const clean = filepath.replace(/^\//, "").replace(/\/notes\.md$/, "");
-  const parts = clean.split("/");
+  const parts = normalizePrerequisitePath(filepath).split("/");
   if (parts.length >= 2) {
-    return `/${encodeURIComponent(parts[0])}/${encodeURIComponent(parts[1])}`;
+    return `/${categorySlug(parts[0])}/${courseSlug(parts[1])}`;
   }
-  return `/${encodeURIComponent(parts[0])}`;
+  return `/${categorySlug(parts[0])}`;
 }

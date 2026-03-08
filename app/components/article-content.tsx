@@ -9,7 +9,6 @@ interface ArticleContentProps {
   imageBaseUrl?: string;
   mode: "toc" | "content";
   title?: string;
-  contributeUrl?: string;
 }
 
 export function ArticleContent({
@@ -32,12 +31,14 @@ export function ArticleContent({
       {title && (
         <h1
           className="mb-8 text-5xl font-normal leading-tight tracking-tight text-foreground"
-          style={{ fontFamily: "var(--font-title)" }}
         >
           {title}
         </h1>
       )}
-      <CollapsibleMarkdown content={content} imageBaseUrl={imageBaseUrl || ""} />
+      <CollapsibleMarkdown
+        content={content}
+        imageBaseUrl={imageBaseUrl || ""}
+      />
     </motion.article>
   );
 }

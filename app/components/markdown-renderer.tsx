@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -12,6 +13,19 @@ interface MarkdownRendererProps {
   imageBaseUrl: string;
 }
 
+function isExternalHref(href: string): boolean {
+  return href.startsWith("http://") || href.startsWith("https://");
+}
+
+function isResolvedImageSrc(src: string): boolean {
+  return (
+    src.startsWith("http://") ||
+    src.startsWith("https://") ||
+    src.startsWith("data:") ||
+    src.startsWith("/")
+  );
+}
+
 export function MarkdownRenderer({
   content,
   imageBaseUrl,
@@ -20,7 +34,7 @@ export function MarkdownRenderer({
     h1: ({ children, ...props }) => (
       <h1
         className="mb-6 mt-10 text-4xl font-normal leading-tight tracking-tight text-foreground first:mt-0"
-        style={{ fontFamily: "var(--font-title)" }}
+        style={{ scrollMarginTop: "var(--sticky-header-offset)" }}
         {...props}
       >
         {children}
@@ -29,7 +43,7 @@ export function MarkdownRenderer({
     h2: ({ children, ...props }) => (
       <h2
         className="mb-4 mt-8 text-3xl font-normal leading-snug text-foreground"
-        style={{ fontFamily: "var(--font-subtitle)" }}
+        style={{ scrollMarginTop: "var(--sticky-header-offset)" }}
         {...props}
       >
         {children}
@@ -38,7 +52,7 @@ export function MarkdownRenderer({
     h3: ({ children, ...props }) => (
       <h3
         className="mb-3 mt-6 text-2xl font-normal leading-snug text-foreground"
-        style={{ fontFamily: "var(--font-subtitle)" }}
+        style={{ scrollMarginTop: "var(--sticky-header-offset)" }}
         {...props}
       >
         {children}
@@ -47,7 +61,7 @@ export function MarkdownRenderer({
     h4: ({ children, ...props }) => (
       <h4
         className="mb-2 mt-5 text-xl font-normal text-foreground"
-        style={{ fontFamily: "var(--font-subtitle)" }}
+        style={{ scrollMarginTop: "var(--sticky-header-offset)" }}
         {...props}
       >
         {children}
@@ -56,7 +70,7 @@ export function MarkdownRenderer({
     h5: ({ children, ...props }) => (
       <h5
         className="mb-2 mt-4 text-lg font-normal text-foreground"
-        style={{ fontFamily: "var(--font-subtitle)" }}
+        style={{ scrollMarginTop: "var(--sticky-header-offset)" }}
         {...props}
       >
         {children}
@@ -65,32 +79,49 @@ export function MarkdownRenderer({
     h6: ({ children, ...props }) => (
       <h6
         className="mb-2 mt-4 text-base font-normal text-muted"
-        style={{ fontFamily: "var(--font-subtitle)" }}
+        style={{ scrollMarginTop: "var(--sticky-header-offset)" }}
         {...props}
       >
         {children}
       </h6>
     ),
     p: ({ children, ...props }) => (
-      <p
-        className="mb-4 text-base leading-7 text-foreground"
-        style={{ fontFamily: "var(--font-body)" }}
-        {...props}
-      >
+      <p className="mb-4 text-base leading-7 text-foreground" {...props}>
         {children}
       </p>
     ),
-    a: ({ children, href, ...props }) => (
-      <a
-        href={href}
-        className="text-accent underline underline-offset-2 transition-colors hover:text-foreground"
-        target={href?.startsWith("http") ? "_blank" : undefined}
-        rel={href?.startsWith("http") ? "noopener noreferrer" : undefined}
-        {...props}
-      >
-        {children}
-      </a>
-    ),
+    a: ({ children, href }) => {
+      const value = typeof href === "string" ? href : "";
+      const className =
+        "text-accent underline underline-offset-2 transition-colors hover:text-foreground";
+
+      if (value.startsWith("/")) {
+        return (
+          <Link href={value} className={className}>
+            {children}
+          </Link>
+        );
+      }
+
+      if (value.startsWith("#")) {
+        return (
+          <a href={value} className={className}>
+            {children}
+          </a>
+        );
+      }
+
+      return (
+        <a
+          href={value || undefined}
+          className={className}
+          target={isExternalHref(value) ? "_blank" : undefined}
+          rel={isExternalHref(value) ? "noopener noreferrer" : undefined}
+        >
+          {children}
+        </a>
+      );
+    },
     ul: ({ children, ...props }) => (
       <ul className="mb-4 ml-6 list-disc space-y-1 text-foreground" {...props}>
         {children}
@@ -117,21 +148,28 @@ export function MarkdownRenderer({
         {children}
       </blockquote>
     ),
-    code: ({ children, className, ...props }) => {
-      const isBlock = className?.includes("language-");
+    code: ({ children, className, node, ...props }) => {
+      const codeText = String(children).replace(/\n$/, "");
+      const isMultiline =
+        node?.position?.start.line !== undefined &&
+        node.position.end.line !== undefined &&
+        node.position.start.line !== node.position.end.line;
+      const isBlock = className?.includes("language-") || isMultiline;
+
       if (isBlock) {
         return (
           <code
-            className={`block overflow-x-auto bg-surface-alt p-4 text-sm leading-6 text-foreground ${className || ""}`}
+            className={`block overflow-x-auto bg-surface-alt p-4 font-mono text-sm leading-6 text-foreground ${className || ""}`}
             {...props}
           >
-            {children}
+            {codeText}
           </code>
         );
       }
+
       return (
         <code
-          className="bg-surface-alt px-1.5 py-0.5 text-sm text-foreground"
+          className="bg-surface-alt px-1.5 py-0.5 font-mono text-sm text-foreground"
           {...props}
         >
           {children}
@@ -173,8 +211,8 @@ export function MarkdownRenderer({
     img: ({ src, alt, ...props }) => {
       const srcStr = typeof src === "string" ? src : "";
       const resolvedSrc =
-        srcStr && !srcStr.startsWith("http")
-          ? `${imageBaseUrl}/${srcStr}`
+        srcStr && !isResolvedImageSrc(srcStr)
+          ? `${imageBaseUrl}/${srcStr.replace(/^\.\//, "")}`
           : srcStr;
       return (
         // eslint-disable-next-line @next/next/no-img-element

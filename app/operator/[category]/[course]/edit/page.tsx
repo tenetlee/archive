@@ -6,6 +6,7 @@ import {
 } from "@/lib/github";
 import {
   getOperatorArticleDraft,
+  getOperatorImageAssets,
   operatorArticlePreviewBaseUrl,
 } from "@/lib/operator-content";
 import { OperatorArticleEditor } from "../../../OperatorArticleEditor";
@@ -31,6 +32,7 @@ export default async function OperatorEditArticlePage({ params }: Props) {
   }
 
   const draft = await getOperatorArticleDraft(categoryEntry.name, courseEntry.name);
+  const assets = await getOperatorImageAssets(categoryEntry.name, courseEntry.name);
 
   return (
     <main className="mx-auto max-w-[1600px] px-4 py-6 lg:px-6">
@@ -44,6 +46,7 @@ export default async function OperatorEditArticlePage({ params }: Props) {
           })
         }
         initialSha={draft?.sha}
+        initialAssets={assets}
         previewBaseUrl={operatorArticlePreviewBaseUrl(
           categoryEntry.name,
           courseEntry.name

@@ -7,6 +7,8 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import rehypeSlug from "rehype-slug";
 import type { Components } from "react-markdown";
+import { getThemeImageVariant, isThemeManagedImage } from "@/lib/theme-images";
+import { useTheme } from "./theme-provider";
 
 interface MarkdownRendererProps {
   content: string;
@@ -30,6 +32,8 @@ export function MarkdownRenderer({
   content,
   imageBaseUrl,
 }: MarkdownRendererProps) {
+  const { theme } = useTheme();
+
   const components: Components = {
     h1: ({ children, ...props }) => (
       <h1
@@ -210,10 +214,13 @@ export function MarkdownRenderer({
     hr: (props) => <hr className="my-8 border-border" {...props} />,
     img: ({ src, alt, ...props }) => {
       const srcStr = typeof src === "string" ? src : "";
+      const themedSrc = isThemeManagedImage(srcStr)
+        ? getThemeImageVariant(srcStr, theme)
+        : srcStr;
       const resolvedSrc =
-        srcStr && !isResolvedImageSrc(srcStr)
-          ? `${imageBaseUrl}/${srcStr.replace(/^\.\//, "")}`
-          : srcStr;
+        themedSrc && !isResolvedImageSrc(themedSrc)
+          ? `${imageBaseUrl}/${themedSrc.replace(/^\.\//, "")}`
+          : themedSrc;
       return (
         // eslint-disable-next-line @next/next/no-img-element
         <img

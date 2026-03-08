@@ -3,8 +3,10 @@
 import { redirect } from "next/navigation";
 import { categorySlug, courseSlug } from "@/lib/github";
 import {
+  createOperatorDrawingAsset,
   createOperatorCategory,
   createOperatorCourse,
+  deleteOperatorImageAsset,
   saveOperatorArticle,
 } from "@/lib/operator-content";
 
@@ -95,4 +97,25 @@ export async function saveArticleAction(
       sha,
     };
   }
+}
+
+export async function saveDrawingAction(input: {
+  category: string;
+  course: string;
+  darkDataUrl: string;
+  lightDataUrl: string;
+  name?: string;
+}) {
+  return createOperatorDrawingAsset(input);
+}
+
+export async function deleteImageAction(input: {
+  category: string;
+  course: string;
+  darkFilename?: string;
+  darkSha?: string;
+  filename: string;
+  sha: string;
+}) {
+  await deleteOperatorImageAsset(input);
 }

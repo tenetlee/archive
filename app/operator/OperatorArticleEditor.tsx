@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import {
+  startTransition,
   useActionState,
   useEffect,
   useEffectEvent,
@@ -11,11 +13,24 @@ import {
 } from "react";
 import { parseArticleDraft } from "@/lib/article-draft";
 import { categorySlug, courseSlug } from "@/lib/github";
+import type { OperatorImageAsset } from "@/lib/operator-content";
+import { getThemeImageVariant } from "@/lib/theme-images";
 import { CollapsibleMarkdown } from "../components/collapsible-markdown";
-import { saveArticleAction, type OperatorFormState } from "./content-actions";
+import { useTheme } from "../components/theme-provider";
+import { OperatorDrawingWindow } from "./OperatorDrawingWindow";
+import {
+  deleteImageAction,
+  saveArticleAction,
+  type OperatorFormState,
+} from "./content-actions";
 
 type EditorMode = "edit" | "preview" | "split";
 type VimMode = "insert" | "normal";
+
+interface DrawingWindowState {
+  id: number;
+  position: { x: number; y: number };
+}
 
 interface ToolbarAction {
   after?: string;
@@ -73,6 +88,17 @@ function getStoredVimEnabled(): boolean {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function getNextDrawingWindowId(windows: DrawingWindowState[]): number {
+  const ids = new Set(windows.map((window) => window.id));
+  let nextId = 1;
+
+  while (ids.has(nextId)) {
+    nextId += 1;
+  }
+
+  return nextId;
 }
 
 function normalizeNormalCursor(text: string, index: number): number {
@@ -248,12 +274,14 @@ function moveToWordEnd(text: string, index: number): number {
 export function OperatorArticleEditor({
   category,
   course,
+  initialAssets,
   initialRaw,
   initialSha,
   previewBaseUrl,
 }: {
   category: string;
   course: string;
+  initialAssets: OperatorImageAsset[];
   initialRaw: string;
   initialSha?: string;
   previewBaseUrl: string;
@@ -262,8 +290,17 @@ export function OperatorArticleEditor({
     saveArticleAction,
     initialSha ? { sha: initialSha } : null
   );
+  const [assets, setAssets] = useState(initialAssets);
+  const [assetError, setAssetError] = useState("");
+  const [assetToDelete, setAssetToDelete] = useState<OperatorImageAsset | null>(null);
+  const [deletingAsset, setDeletingAsset] = useState<string | null>(null);
+  const [activeDrawingWindowId, setActiveDrawingWindowId] = useState<number | null>(null);
+  const [drawingWindows, setDrawingWindows] = useState<DrawingWindowState[]>([]);
   const [mode, setMode] = useState<EditorMode>("split");
   const [raw, setRaw] = useState(initialRaw);
+  const [savingDrawingWindowId, setSavingDrawingWindowId] = useState<number | null>(
+    null
+  );
   const [pendingVimCommand, setPendingVimCommand] = useState<"d" | "g" | null>(
     null
   );
@@ -274,11 +311,70 @@ export function OperatorArticleEditor({
   const formRef = useRef<HTMLFormElement>(null);
   const preferredColumnRef = useRef<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
+  const { theme } = useTheme();
   const parsed = useMemo(() => parseArticleDraft(raw, course), [course, raw]);
   const currentSha = state?.sha ?? initialSha ?? "";
   const previewHref = `/operator/${categorySlug(category)}/${courseSlug(course)}`;
   const publicHref = `/${categorySlug(category)}/${courseSlug(course)}`;
+
+  useEffect(() => {
+    function handleDocumentPointerDown(event: PointerEvent) {
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest('[data-drawing-window="true"]')
+      ) {
+        return;
+      }
+
+      setActiveDrawingWindowId(null);
+    }
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleDocumentPointerDown, true);
+    };
+  }, []);
+
+  function openDrawingWindow() {
+    setDrawingWindows((current) => {
+      const id = getNextDrawingWindowId(current);
+      const offset = current.length * 28;
+      setActiveDrawingWindowId(id);
+
+      return [
+        ...current,
+        {
+          id,
+          position: {
+            x: 72 + offset,
+            y: 120 + offset,
+          },
+        },
+      ];
+    });
+  }
+
+  function focusDrawingWindow(id: number) {
+    setActiveDrawingWindowId(id);
+    setDrawingWindows((current) => {
+      const windowToFocus = current.find((item) => item.id === id);
+      if (!windowToFocus) {
+        return current;
+      }
+
+      return [
+        ...current.filter((item) => item.id !== id),
+        windowToFocus,
+      ];
+    });
+  }
+
+  function closeDrawingWindow(id: number) {
+    setDrawingWindows((current) => current.filter((item) => item.id !== id));
+    setActiveDrawingWindowId((current) => (current === id ? null : current));
+    setSavingDrawingWindowId((current) => (current === id ? null : current));
+  }
 
   function setEditorSelection(index: number) {
     const textarea = textareaRef.current;
@@ -304,6 +400,60 @@ export function OperatorArticleEditor({
 
       textarea.focus();
       textarea.setSelectionRange(nextIndex, nextIndex);
+    });
+  }
+
+  function insertTextAtCursor(text: string) {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setRaw((current) => `${current}${text}`);
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const nextRaw = raw.slice(0, start) + text + raw.slice(end);
+    const nextCursor = start + text.length;
+    applyEditorState(nextRaw, nextCursor);
+  }
+
+  function handleAssetCreated(asset: OperatorImageAsset) {
+    setAssets((current) => [asset, ...current]);
+  }
+
+  function insertAssetReference(asset: OperatorImageAsset) {
+    insertTextAtCursor(`\n![${asset.displayName}](${asset.markdownPath})\n`);
+  }
+
+  function confirmAssetDelete() {
+    if (!assetToDelete) {
+      return;
+    }
+
+    setAssetError("");
+    setDeletingAsset(assetToDelete.filename);
+
+    startTransition(async () => {
+      try {
+        await deleteImageAction({
+          category,
+          course,
+          darkFilename: assetToDelete.darkFilename,
+          darkSha: assetToDelete.darkSha,
+          filename: assetToDelete.filename,
+          sha: assetToDelete.sha,
+        });
+        setAssets((current) =>
+          current.filter((item) => item.filename !== assetToDelete.filename)
+        );
+        setAssetToDelete(null);
+      } catch (error) {
+        setAssetError(
+          error instanceof Error ? error.message : "Unable to delete image."
+        );
+      } finally {
+        setDeletingAsset(null);
+      }
     });
   }
 
@@ -573,6 +723,13 @@ export function OperatorArticleEditor({
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
+                onClick={openDrawingWindow}
+                className="border border-border px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-alt"
+              >
+                New drawing window
+              </button>
+              <button
+                type="button"
                 onClick={toggleVimMode}
                 className={`border px-3 py-2 text-sm transition-colors ${
                   vimEnabled
@@ -665,46 +822,187 @@ export function OperatorArticleEditor({
           ) : null}
         </div>
 
-        <div className="grid min-h-[70vh] gap-0 xl:grid-cols-2">
-          {mode !== "preview" ? (
-            <div className={mode === "split" ? "border-r border-border" : ""}>
-              <textarea
-                ref={textareaRef}
-                name="raw"
-                value={raw}
-                onChange={(event) => setRaw(event.target.value)}
-                onFocus={syncNormalCursorPosition}
-                onKeyDown={handleEditorKeyDown}
-                onMouseUp={syncNormalCursorPosition}
-                spellCheck={false}
-                className="h-full min-h-[70vh] w-full resize-none bg-background px-4 py-4 font-mono text-sm leading-6 text-foreground outline-none"
-              />
+        <div className="grid min-h-[70vh] gap-0 xl:grid-cols-[18rem_1fr]">
+          <aside className="border-b border-border bg-surface-alt xl:border-b-0 xl:border-r">
+            <div className="border-b border-border px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+                Images
+              </p>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                Drag into the editor or click insert. Save the article to persist
+                image references.
+              </p>
             </div>
-          ) : null}
 
-          {mode !== "edit" ? (
-            <div className="bg-background">
-              <div className="border-b border-border px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted">
-                Live preview
-              </div>
-              <div className="px-4 py-6 lg:px-8">
-                <h1 className="mb-3 text-5xl font-normal leading-tight tracking-tight text-foreground">
-                  {parsed.title || course}
-                </h1>
-                {parsed.prerequisites.length > 0 ? (
-                  <p className="mb-8 text-sm leading-6 text-muted">
-                    Prerequisites: {parsed.prerequisites.join(", ")}
-                  </p>
-                ) : null}
-                <CollapsibleMarkdown
-                  content={parsed.content}
-                  imageBaseUrl={previewBaseUrl}
+            <div className="max-h-[70vh] space-y-3 overflow-y-auto p-4">
+              {assets.length === 0 ? (
+                <p className="text-sm text-muted">
+                  No images yet. Use the drawing window or upload assets later.
+                </p>
+              ) : (
+                assets.map((asset) => (
+                  <div
+                    key={asset.filename}
+                    draggable
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData(
+                        "text/plain",
+                        `![${asset.displayName}](${asset.markdownPath})`
+                      );
+                      event.dataTransfer.effectAllowed = "copy";
+                    }}
+                    className="border border-border bg-surface p-3"
+                  >
+                    <div className="relative mb-3 aspect-video w-full border border-border bg-[#efede7]">
+                      <Image
+                        src={
+                          theme === "dark" && asset.darkUrl
+                            ? asset.darkUrl
+                            : asset.url
+                        }
+                        alt={asset.displayName}
+                        fill
+                        sizes="288px"
+                        className="object-contain"
+                      />
+                    </div>
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {asset.displayName}
+                    </p>
+                    <p className="mt-1 truncate font-mono text-xs text-muted">
+                      {theme === "dark" && asset.themeManaged
+                        ? getThemeImageVariant(asset.markdownPath, "dark")
+                        : asset.markdownPath}
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => insertAssetReference(asset)}
+                        className="flex-1 border border-border px-3 py-2 text-xs font-medium uppercase tracking-wide text-foreground transition-colors hover:bg-surface-alt"
+                      >
+                        Insert
+                      </button>
+                      <button
+                        type="button"
+                        disabled={deletingAsset === asset.filename}
+                        onClick={() => {
+                          setAssetError("");
+                          setAssetToDelete(asset);
+                        }}
+                        className="border border-border px-3 py-2 text-xs font-medium uppercase tracking-wide text-foreground transition-colors hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {deletingAsset === asset.filename ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </aside>
+
+          <div className="grid min-h-[70vh] gap-0 xl:grid-cols-2">
+            {mode !== "preview" ? (
+              <div className={mode === "split" ? "border-r border-border" : ""}>
+                <textarea
+                  ref={textareaRef}
+                  name="raw"
+                  value={raw}
+                  onChange={(event) => setRaw(event.target.value)}
+                  onFocus={syncNormalCursorPosition}
+                  onKeyDown={handleEditorKeyDown}
+                  onMouseUp={syncNormalCursorPosition}
+                  spellCheck={false}
+                  className="h-full min-h-[70vh] w-full resize-none bg-background px-4 py-4 font-mono text-sm leading-6 text-foreground outline-none"
                 />
               </div>
-            </div>
-          ) : null}
+            ) : null}
+
+            {mode !== "edit" ? (
+              <div className="bg-background">
+                <div className="border-b border-border px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted">
+                  Live preview
+                </div>
+                <div className="px-4 py-6 lg:px-8">
+                  <h1 className="mb-3 text-5xl font-normal leading-tight tracking-tight text-foreground">
+                    {parsed.title || course}
+                  </h1>
+                  {parsed.prerequisites.length > 0 ? (
+                    <p className="mb-8 text-sm leading-6 text-muted">
+                      Prerequisites: {parsed.prerequisites.join(", ")}
+                    </p>
+                  ) : null}
+                  <CollapsibleMarkdown
+                    content={parsed.content}
+                    imageBaseUrl={previewBaseUrl}
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
       </form>
+
+      {drawingWindows.map((windowState, index) => (
+        <OperatorDrawingWindow
+          key={windowState.id}
+          active={windowState.id === activeDrawingWindowId}
+          category={category}
+          course={course}
+          disableSave={
+            savingDrawingWindowId !== null && savingDrawingWindowId !== windowState.id
+          }
+          initialPosition={windowState.position}
+          onAssetCreated={handleAssetCreated}
+          onClose={() => closeDrawingWindow(windowState.id)}
+          onFocus={() => focusDrawingWindow(windowState.id)}
+          onSaveEnd={() => setSavingDrawingWindowId(null)}
+          onSaveStart={() => setSavingDrawingWindowId(windowState.id)}
+          windowId={windowState.id}
+          zIndex={80 + index}
+        />
+      ))}
+
+      {assetToDelete ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/25 px-4">
+          <div className="w-full max-w-md border border-border bg-surface p-6 shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Delete Image
+            </p>
+            <h2 className="mt-2 text-2xl tracking-tight text-foreground">
+              {assetToDelete.displayName}
+            </h2>
+            <p className="mt-4 text-sm leading-6 text-muted">
+              This removes the image from GitHub. Any existing markdown references
+              to it will stop working.
+            </p>
+            {assetError ? (
+              <p className="mt-4 text-sm leading-6 text-red-600 dark:text-red-400">
+                {assetError}
+              </p>
+            ) : null}
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setAssetError("");
+                  setAssetToDelete(null);
+                }}
+                className="border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-surface-alt"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingAsset === assetToDelete.filename}
+                onClick={confirmAssetDelete}
+                className="border border-foreground bg-foreground px-4 py-2 text-sm font-medium text-background disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {deletingAsset === assetToDelete.filename ? "Deleting..." : "Delete image"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

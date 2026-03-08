@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { categorySlug, courseSlug } from "@/lib/github";
+import { requireOperatorAuthentication } from "@/lib/operator-auth";
 import {
   createOperatorDrawingAsset,
   createOperatorCategory,
@@ -30,6 +31,7 @@ export async function createCategoryAction(
   const name = stringField(formData, "name");
 
   try {
+    await requireOperatorAuthentication();
     await createOperatorCategory(name);
   } catch (error) {
     return {
@@ -54,6 +56,7 @@ export async function createCourseAction(
   const content = stringField(formData, "content");
 
   try {
+    await requireOperatorAuthentication();
     await createOperatorCourse({
       category,
       content,
@@ -80,6 +83,7 @@ export async function saveArticleAction(
   const sha = stringField(formData, "sha") || undefined;
 
   try {
+    await requireOperatorAuthentication();
     const result = await saveOperatorArticle({
       category,
       course,
@@ -106,6 +110,7 @@ export async function saveDrawingAction(input: {
   lightDataUrl: string;
   name?: string;
 }) {
+  await requireOperatorAuthentication();
   return createOperatorDrawingAsset(input);
 }
 
@@ -117,5 +122,6 @@ export async function deleteImageAction(input: {
   filename: string;
   sha: string;
 }) {
+  await requireOperatorAuthentication();
   await deleteOperatorImageAsset(input);
 }

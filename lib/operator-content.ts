@@ -1,4 +1,7 @@
+import "server-only";
+
 import { buildArticleDraft, parseArticleDraft } from "./article-draft";
+import { requireOperatorAuthentication } from "./operator-auth";
 import {
   getThemeImageVariant,
   parseThemeImageName,
@@ -266,6 +269,7 @@ export async function getOperatorImageAssets(
 }
 
 export async function createOperatorCategory(name: string) {
+  await requireOperatorAuthentication();
   const trimmedName = name.trim();
   if (!trimmedName) {
     throw new Error("Category name is required.");
@@ -298,6 +302,7 @@ export async function createOperatorCourse({
   prerequisites?: string[];
   title?: string;
 }) {
+  await requireOperatorAuthentication();
   const trimmedCategory = category.trim();
   const trimmedCourse = course.trim();
 
@@ -343,6 +348,7 @@ export async function saveOperatorArticle({
   raw: string;
   sha?: string;
 }) {
+  await requireOperatorAuthentication();
   const trimmedCategory = category.trim();
   const trimmedCourse = course.trim();
   const trimmedRaw = raw.replace(/\r\n/g, "\n");
@@ -407,6 +413,7 @@ export async function createOperatorDrawingAsset({
   lightDataUrl: string;
   name?: string;
 }) {
+  await requireOperatorAuthentication();
   const trimmedCategory = category.trim();
   const trimmedCourse = course.trim();
 
@@ -480,6 +487,7 @@ export async function deleteOperatorImageAsset({
   filename: string;
   sha: string;
 }) {
+  await requireOperatorAuthentication();
   const trimmedCategory = category.trim();
   const trimmedCourse = course.trim();
   const trimmedFilename = filename.trim();

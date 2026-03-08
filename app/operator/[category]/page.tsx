@@ -5,8 +5,8 @@ import {
   getCourses,
 } from "@/lib/github";
 import Link from "next/link";
-import { FolderGrid } from "../../components/folder-grid";
 import { notFound } from "next/navigation";
+import { OperatorFolderGrid } from "../OperatorFolderGrid";
 
 const OP = { noCache: true as const };
 const BASE = "/operator";
@@ -26,9 +26,12 @@ export default async function OperatorCategoryPage({ params }: Props) {
   const courses = await getCourses(categoryEntry.name, OP);
 
   const items = courses.map((course) => ({
+    category: categoryEntry.name,
+    course: course.name,
     name: course.name,
     href: `${BASE}/${categorySlug(categoryEntry.name)}/${courseSlug(course.name)}`,
     childCount: 1,
+    kind: "course" as const,
   }));
 
   return (
@@ -52,7 +55,7 @@ export default async function OperatorCategoryPage({ params }: Props) {
         (uncached)
       </p>
       {items.length > 0 ? (
-        <FolderGrid items={items} />
+        <OperatorFolderGrid items={items} />
       ) : (
         <p className="text-muted">No courses found in this category yet.</p>
       )}

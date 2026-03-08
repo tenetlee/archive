@@ -1,6 +1,6 @@
 import { getCategories, getCourses, categorySlug } from "@/lib/github";
 import Link from "next/link";
-import { FolderGrid } from "../components/folder-grid";
+import { OperatorFolderGrid } from "./OperatorFolderGrid";
 
 const OP = { noCache: true as const };
 const BASE = "/operator";
@@ -12,9 +12,11 @@ export default async function OperatorHome() {
     categories.map(async (cat) => {
       const courses = await getCourses(cat.name, OP);
       return {
+        category: cat.name,
         name: cat.name,
         href: `${BASE}/${categorySlug(cat.name)}`,
         childCount: courses.length,
+        kind: "category" as const,
       };
     })
   );
@@ -42,7 +44,7 @@ export default async function OperatorHome() {
       <p className="mb-10 text-muted">
         Select a category (uncached — fresh from GitHub).
       </p>
-      <FolderGrid items={items} />
+      <OperatorFolderGrid items={items} />
     </main>
   );
 }

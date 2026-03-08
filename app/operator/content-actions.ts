@@ -7,6 +7,8 @@ import {
   createOperatorDrawingAsset,
   createOperatorCategory,
   createOperatorCourse,
+  deleteOperatorCategory,
+  deleteOperatorCourse,
   deleteOperatorImageAsset,
   saveOperatorArticle,
 } from "@/lib/operator-content";
@@ -124,4 +126,22 @@ export async function deleteImageAction(input: {
 }) {
   await requireOperatorAuthentication();
   await deleteOperatorImageAsset(input);
+}
+
+export async function deleteOperatorEntryAction(input: {
+  category?: string;
+  course?: string;
+  kind: "category" | "course" | "article";
+}) {
+  await requireOperatorAuthentication();
+
+  if (input.kind === "category") {
+    await deleteOperatorCategory(input.category ?? "");
+    return;
+  }
+
+  await deleteOperatorCourse({
+    category: input.category ?? "",
+    course: input.course ?? "",
+  });
 }

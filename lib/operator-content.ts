@@ -39,6 +39,13 @@ export interface OperatorImageAsset {
   url: string;
 }
 
+interface OperatorDirectoryEntry {
+  name: string;
+  path: string;
+  sha: string;
+  type: "file" | "dir";
+}
+
 function githubHeaders(): HeadersInit {
   const token = process.env.GITHUB_TOKEN;
   const headers: Record<string, string> = {
@@ -113,7 +120,7 @@ async function getDirectoryEntries(...segments: string[]) {
   }
 
   const data = await response.json();
-  return Array.isArray(data) ? data : [];
+  return Array.isArray(data) ? (data as OperatorDirectoryEntry[]) : [];
 }
 
 async function putContent({
@@ -337,6 +344,32 @@ export async function createOperatorCourse({
   });
 }
 
+async function deleteTree(
+  pathSegments: string[],
+  label: string
+) {
+  const entries = await getDirectoryEntries(...pathSegments);
+  const directories = entries
+    .filter((entry) => entry.type === "dir")
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const files = entries
+    .filter((entry) => entry.type === "file")
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+  for (const directory of directories) {
+    await deleteTree([...pathSegments, directory.name], label);
+  }
+
+  for (const file of files) {
+    await deleteContent({
+      allowMissing: true,
+      message: `Delete ${file.name} from ${label}`,
+      pathSegments: [...pathSegments, file.name],
+      sha: file.sha,
+    });
+  }
+}
+
 export async function saveOperatorArticle({
   category,
   course,
@@ -380,6 +413,36 @@ export async function saveOperatorArticle({
     sha: result.sha,
     title: parsed.title,
   };
+}
+
+export async function deleteOperatorCategory(category: string) {
+  const trimmedCategory = category.trim();
+
+  if (!trimmedCategory) {
+    throw new Error("Category name is required.");
+  }
+
+  await deleteTree([trimmedCategory], `category ${trimmedCategory}`);
+}
+
+export async function deleteOperatorCourse({
+  category,
+  course,
+}: {
+  category: string;
+  course: string;
+}) {
+  const trimmedCategory = category.trim();
+  const trimmedCourse = course.trim();
+
+  if (!trimmedCategory || !trimmedCourse) {
+    throw new Error("Category and course are required.");
+  }
+
+  await deleteTree(
+    [trimmedCategory, trimmedCourse],
+    `course ${trimmedCourse} in ${trimmedCategory}`
+  );
 }
 
 function sanitizeAssetSegment(value: string): string {

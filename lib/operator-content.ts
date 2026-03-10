@@ -195,19 +195,48 @@ async function deleteContent({
   }
 }
 
-export function operatorArticlePreviewBaseUrl(category: string, course: string) {
-  return rawUrl(category, course);
+export function operatorArticlePreviewBaseUrl(
+  category: string,
+  course: string,
+  article?: string
+) {
+  return article ? rawUrl(category, course, article) : rawUrl(category, course);
 }
 
-export async function getOperatorArticleDraft(category: string, course: string) {
-  const entry = await getFileContentEntry(category, course, "notes.md");
+export function operatorArticlePreviewBaseUrlByPath(pathSegments: string[]) {
+  return rawUrl(...pathSegments);
+}
+
+export async function getOperatorArticleDraft(
+  category: string,
+  course: string,
+  article?: string
+) {
+  const entry = article
+    ? await getFileContentEntry(category, course, article, "notes.md")
+    : await getFileContentEntry(category, course, "notes.md");
   if (!entry?.content || !entry.sha) {
     return null;
   }
 
   const raw = Buffer.from(entry.content, "base64").toString("utf8");
   return {
-    parsed: parseArticleDraft(raw, course),
+    parsed: parseArticleDraft(raw, article || course),
+    raw,
+    sha: entry.sha as string,
+  };
+}
+
+export async function getOperatorArticleDraftByPath(pathSegments: string[]) {
+  const entry = await getFileContentEntry(...pathSegments, "notes.md");
+  if (!entry?.content || !entry.sha) {
+    return null;
+  }
+
+  const raw = Buffer.from(entry.content, "base64").toString("utf8");
+  const fallbackTitle = pathSegments[pathSegments.length - 1] ?? "Untitled";
+  return {
+    parsed: parseArticleDraft(raw, fallbackTitle),
     raw,
     sha: entry.sha as string,
   };
@@ -215,9 +244,12 @@ export async function getOperatorArticleDraft(category: string, course: string) 
 
 export async function getOperatorImageAssets(
   category: string,
-  course: string
+  course: string,
+  article?: string
 ): Promise<OperatorImageAsset[]> {
-  const entries = await getDirectoryEntries(category, course, "images");
+  const entries = article
+    ? await getDirectoryEntries(category, course, article, "images")
+    : await getDirectoryEntries(category, course, "images");
   const imageEntries = entries
     .filter(
       (entry) =>
@@ -250,13 +282,17 @@ export async function getOperatorImageAssets(
         assets.push({
           darkFilename,
           darkSha: darkEntry.sha as string,
-          darkUrl: rawUrl(category, course, "images", darkFilename),
+          darkUrl: article
+            ? rawUrl(category, course, article, "images", darkFilename)
+            : rawUrl(category, course, "images", darkFilename),
           displayName: stripThemeImageSuffix(filename),
           filename,
           markdownPath: `images/${filename}`,
           sha: entry.sha as string,
           themeManaged: true,
-          url: rawUrl(category, course, "images", filename),
+          url: article
+            ? rawUrl(category, course, article, "images", filename)
+            : rawUrl(category, course, "images", filename),
         });
         continue;
       }
@@ -268,7 +304,70 @@ export async function getOperatorImageAssets(
       markdownPath: `images/${filename}`,
       sha: entry.sha as string,
       themeManaged: false,
-      url: rawUrl(category, course, "images", filename),
+      url: article
+        ? rawUrl(category, course, article, "images", filename)
+        : rawUrl(category, course, "images", filename),
+    });
+  }
+
+  return assets;
+}
+
+export async function getOperatorImageAssetsByPath(
+  pathSegments: string[]
+): Promise<OperatorImageAsset[]> {
+  const entries = await getDirectoryEntries(...pathSegments, "images");
+  const imageEntries = entries
+    .filter(
+      (entry) =>
+        entry.type === "file" &&
+        /\.(png|jpe?g|gif|webp|svg)$/i.test(entry.name)
+    )
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const entryMap = new Map(
+    imageEntries.map((entry) => [entry.name as string, entry])
+  );
+
+  const assets: OperatorImageAsset[] = [];
+
+  for (const entry of imageEntries) {
+    const filename = entry.name as string;
+    const parsed = parseThemeImageName(filename);
+
+    if (parsed?.mode === "dark") {
+      const lightFilename = getThemeImageVariant(filename, "light");
+      if (entryMap.has(lightFilename)) {
+        continue;
+      }
+    }
+
+    if (parsed?.mode === "light") {
+      const darkFilename = getThemeImageVariant(filename, "dark");
+      const darkEntry = entryMap.get(darkFilename);
+
+      if (darkEntry) {
+        assets.push({
+          darkFilename,
+          darkSha: darkEntry.sha as string,
+          darkUrl: rawUrl(...pathSegments, "images", darkFilename),
+          displayName: stripThemeImageSuffix(filename),
+          filename,
+          markdownPath: `images/${filename}`,
+          sha: entry.sha as string,
+          themeManaged: true,
+          url: rawUrl(...pathSegments, "images", filename),
+        });
+        continue;
+      }
+    }
+
+    assets.push({
+      displayName: filename,
+      filename,
+      markdownPath: `images/${filename}`,
+      sha: entry.sha as string,
+      themeManaged: false,
+      url: rawUrl(...pathSegments, "images", filename),
     });
   }
 
@@ -296,18 +395,40 @@ export async function createOperatorCategory(name: string) {
   });
 }
 
+export async function createOperatorFolder({
+  name,
+  parentPath,
+}: {
+  name: string;
+  parentPath?: string[];
+}) {
+  await requireOperatorAuthentication();
+  const trimmedName = name.trim();
+  const normalizedParentPath = (parentPath ?? []).map((segment) => segment.trim()).filter(Boolean);
+
+  if (!trimmedName) {
+    throw new Error("Folder name is required.");
+  }
+
+  if (await pathExists(...normalizedParentPath, trimmedName)) {
+    throw new Error("A folder with that name already exists here.");
+  }
+
+  await putContent({
+    encodedContent: Buffer.from("Created by operator UI.\n", "utf8").toString(
+      "base64"
+    ),
+    message: `Create folder ${trimmedName}`,
+    pathSegments: [...normalizedParentPath, trimmedName, ".gitkeep"],
+  });
+}
+
 export async function createOperatorCourse({
   category,
-  content,
   course,
-  prerequisites,
-  title,
 }: {
   category: string;
-  content?: string;
   course: string;
-  prerequisites?: string[];
-  title?: string;
 }) {
   await requireOperatorAuthentication();
   const trimmedCategory = category.trim();
@@ -321,26 +442,110 @@ export async function createOperatorCourse({
     throw new Error("Course name is required.");
   }
 
-  const categoryEntry = await pathExists(trimmedCategory);
-  if (!categoryEntry) {
+  if (!(await pathExists(trimmedCategory))) {
     throw new Error("Selected category does not exist.");
   }
 
-  const existing = await pathExists(trimmedCategory, trimmedCourse, "notes.md");
+  const existing = await pathExists(trimmedCategory, trimmedCourse);
   if (existing) {
     throw new Error("A course with that name already exists in this category.");
+  }
+
+  await putContent({
+    encodedContent: Buffer.from("Created by operator UI.\n", "utf8").toString(
+      "base64"
+    ),
+    message: `Create course ${trimmedCourse} in ${trimmedCategory}`,
+    pathSegments: [trimmedCategory, trimmedCourse, ".gitkeep"],
+  });
+}
+
+export async function createOperatorArticle({
+  article,
+  category,
+  content,
+  course,
+  prerequisites,
+  title,
+}: {
+  article: string;
+  category: string;
+  content?: string;
+  course: string;
+  prerequisites?: string[];
+  title?: string;
+}) {
+  await requireOperatorAuthentication();
+  const trimmedCategory = category.trim();
+  const trimmedCourse = course.trim();
+  const trimmedArticle = article.trim();
+
+  if (!trimmedCategory || !trimmedCourse || !trimmedArticle) {
+    throw new Error("Category, course, and article are required.");
+  }
+
+  if (!(await pathExists(trimmedCategory, trimmedCourse))) {
+    throw new Error("Selected course does not exist.");
+  }
+
+  if (await pathExists(trimmedCategory, trimmedCourse, "notes.md")) {
+    throw new Error(
+      "This course still uses the legacy single-article layout. Create a new multi-article course instead."
+    );
+  }
+
+  if (await pathExists(trimmedCategory, trimmedCourse, trimmedArticle)) {
+    throw new Error("An article with that name already exists in this course.");
   }
 
   const raw = buildArticleDraft({
     content,
     prerequisites,
-    title: title?.trim() || trimmedCourse,
+    title: title?.trim() || trimmedArticle,
   });
 
   await putContent({
     encodedContent: Buffer.from(raw, "utf8").toString("base64"),
-    message: `Create course ${trimmedCourse} in ${trimmedCategory}`,
-    pathSegments: [trimmedCategory, trimmedCourse, "notes.md"],
+    message: `Create article ${trimmedArticle} in ${trimmedCourse}`,
+    pathSegments: [trimmedCategory, trimmedCourse, trimmedArticle, "notes.md"],
+  });
+}
+
+export async function createOperatorArticleInFolder({
+  article,
+  content,
+  parentPath,
+  prerequisites,
+  title,
+}: {
+  article: string;
+  content?: string;
+  parentPath?: string[];
+  prerequisites?: string[];
+  title?: string;
+}) {
+  await requireOperatorAuthentication();
+  const trimmedArticle = article.trim();
+  const normalizedParentPath = (parentPath ?? []).map((segment) => segment.trim()).filter(Boolean);
+
+  if (!trimmedArticle) {
+    throw new Error("Article name is required.");
+  }
+
+  if (await pathExists(...normalizedParentPath, trimmedArticle)) {
+    throw new Error("An article with that name already exists here.");
+  }
+
+  const raw = buildArticleDraft({
+    content,
+    prerequisites,
+    title: title?.trim() || trimmedArticle,
+  });
+
+  await putContent({
+    encodedContent: Buffer.from(raw, "utf8").toString("base64"),
+    message: `Create article ${trimmedArticle}`,
+    pathSegments: [...normalizedParentPath, trimmedArticle, "notes.md"],
   });
 }
 
@@ -370,12 +575,49 @@ async function deleteTree(
   }
 }
 
+async function copyTree(
+  fromPathSegments: string[],
+  toPathSegments: string[],
+  label: string
+) {
+  const entries = await getDirectoryEntries(...fromPathSegments);
+  const directories = entries
+    .filter((entry) => entry.type === "dir")
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const files = entries
+    .filter((entry) => entry.type === "file")
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+  for (const file of files) {
+    const sourceFile = await getFileContentEntry(...fromPathSegments, file.name);
+    if (!sourceFile?.content) {
+      continue;
+    }
+
+    await putContent({
+      encodedContent: sourceFile.content as string,
+      message: `Copy ${file.name} while renaming ${label}`,
+      pathSegments: [...toPathSegments, file.name],
+    });
+  }
+
+  for (const directory of directories) {
+    await copyTree(
+      [...fromPathSegments, directory.name],
+      [...toPathSegments, directory.name],
+      label
+    );
+  }
+}
+
 export async function saveOperatorArticle({
+  article,
   category,
   course,
   raw,
   sha,
 }: {
+  article?: string;
   category: string;
   course: string;
   raw: string;
@@ -394,7 +636,7 @@ export async function saveOperatorArticle({
     throw new Error("Article content cannot be empty.");
   }
 
-  const parsed = parseArticleDraft(trimmedRaw, trimmedCourse);
+  const parsed = parseArticleDraft(trimmedRaw, article?.trim() || trimmedCourse);
   if (!parsed.title.trim()) {
     throw new Error("Article title cannot be empty.");
   }
@@ -405,7 +647,52 @@ export async function saveOperatorArticle({
       "utf8"
     ).toString("base64"),
     message: `Update article ${trimmedCourse} in ${trimmedCategory}`,
-    pathSegments: [trimmedCategory, trimmedCourse, "notes.md"],
+    pathSegments: article?.trim()
+      ? [trimmedCategory, trimmedCourse, article.trim(), "notes.md"]
+      : [trimmedCategory, trimmedCourse, "notes.md"],
+    sha,
+  });
+
+  return {
+    sha: result.sha,
+    title: parsed.title,
+  };
+}
+
+export async function saveOperatorArticleByPath({
+  pathSegments,
+  raw,
+  sha,
+}: {
+  pathSegments: string[];
+  raw: string;
+  sha?: string;
+}) {
+  await requireOperatorAuthentication();
+  const normalizedPath = pathSegments.map((segment) => segment.trim()).filter(Boolean);
+  const trimmedRaw = raw.replace(/\r\n/g, "\n");
+
+  if (normalizedPath.length === 0) {
+    throw new Error("Article path is required.");
+  }
+
+  if (!trimmedRaw.trim()) {
+    throw new Error("Article content cannot be empty.");
+  }
+
+  const fallbackTitle = normalizedPath[normalizedPath.length - 1] ?? "Untitled";
+  const parsed = parseArticleDraft(trimmedRaw, fallbackTitle);
+  if (!parsed.title.trim()) {
+    throw new Error("Article title cannot be empty.");
+  }
+
+  const result = await putContent({
+    encodedContent: Buffer.from(
+      trimmedRaw.endsWith("\n") ? trimmedRaw : `${trimmedRaw}\n`,
+      "utf8"
+    ).toString("base64"),
+    message: `Update article ${fallbackTitle}`,
+    pathSegments: [...normalizedPath, "notes.md"],
     sha,
   });
 
@@ -423,6 +710,61 @@ export async function deleteOperatorCategory(category: string) {
   }
 
   await deleteTree([trimmedCategory], `category ${trimmedCategory}`);
+}
+
+export async function deleteOperatorFolderByPath(pathSegments: string[]) {
+  const normalizedPath = pathSegments.map((segment) => segment.trim()).filter(Boolean);
+
+  if (normalizedPath.length === 0) {
+    throw new Error("Folder path is required.");
+  }
+
+  await deleteTree(normalizedPath, `folder ${normalizedPath[normalizedPath.length - 1]}`);
+}
+
+export async function renameOperatorFolderByPath({
+  nextName,
+  pathSegments,
+}: {
+  nextName: string;
+  pathSegments: string[];
+}) {
+  await requireOperatorAuthentication();
+  const normalizedPath = pathSegments.map((segment) => segment.trim()).filter(Boolean);
+  const trimmedNextName = nextName.trim();
+
+  if (normalizedPath.length === 0) {
+    throw new Error("Folder path is required.");
+  }
+
+  if (!trimmedNextName) {
+    throw new Error("Folder name is required.");
+  }
+
+  const currentName = normalizedPath[normalizedPath.length - 1] ?? "";
+  if (!currentName) {
+    throw new Error("Folder path is required.");
+  }
+
+  if (currentName === trimmedNextName) {
+    return {
+      nextPathSegments: normalizedPath,
+    };
+  }
+
+  const parentPath = normalizedPath.slice(0, -1);
+  const nextPathSegments = [...parentPath, trimmedNextName];
+
+  if (await pathExists(...nextPathSegments)) {
+    throw new Error("A folder with that name already exists here.");
+  }
+
+  await copyTree(normalizedPath, nextPathSegments, currentName);
+  await deleteTree(normalizedPath, `folder ${currentName}`);
+
+  return {
+    nextPathSegments,
+  };
 }
 
 export async function deleteOperatorCourse({
@@ -445,6 +787,39 @@ export async function deleteOperatorCourse({
   );
 }
 
+export async function deleteOperatorArticle({
+  article,
+  category,
+  course,
+}: {
+  article: string;
+  category: string;
+  course: string;
+}) {
+  const trimmedCategory = category.trim();
+  const trimmedCourse = course.trim();
+  const trimmedArticle = article.trim();
+
+  if (!trimmedCategory || !trimmedCourse || !trimmedArticle) {
+    throw new Error("Category, course, and article are required.");
+  }
+
+  await deleteTree(
+    [trimmedCategory, trimmedCourse, trimmedArticle],
+    `article ${trimmedArticle} in ${trimmedCourse}`
+  );
+}
+
+export async function deleteOperatorArticleByPath(pathSegments: string[]) {
+  const normalizedPath = pathSegments.map((segment) => segment.trim()).filter(Boolean);
+
+  if (normalizedPath.length === 0) {
+    throw new Error("Article path is required.");
+  }
+
+  await deleteTree(normalizedPath, `article ${normalizedPath[normalizedPath.length - 1]}`);
+}
+
 function sanitizeAssetSegment(value: string): string {
   return value
     .trim()
@@ -464,12 +839,14 @@ function parsePngDataUrl(dataUrl: string): string {
 }
 
 export async function createOperatorDrawingAsset({
+  article,
   category,
   course,
   darkDataUrl,
   lightDataUrl,
   name,
 }: {
+  article?: string;
   category: string;
   course: string;
   darkDataUrl: string;
@@ -491,11 +868,14 @@ export async function createOperatorDrawingAsset({
   const sharedName = `${baseName}-${stamp}`;
   const lightFilename = `${sharedName}-light.png`;
   const darkFilename = `${sharedName}-dark.png`;
+  const imagePath = article?.trim()
+    ? [trimmedCategory, trimmedCourse, article.trim(), "images"]
+    : [trimmedCategory, trimmedCourse, "images"];
 
   const lightResult = await putContent({
     encodedContent: encodedLightContent,
     message: `Add drawing ${lightFilename} to ${trimmedCourse} in ${trimmedCategory}`,
-    pathSegments: [trimmedCategory, trimmedCourse, "images", lightFilename],
+    pathSegments: [...imagePath, lightFilename],
   });
 
   let darkResult: Awaited<ReturnType<typeof putContent>>;
@@ -504,14 +884,14 @@ export async function createOperatorDrawingAsset({
     darkResult = await putContent({
       encodedContent: encodedDarkContent,
       message: `Add drawing ${darkFilename} to ${trimmedCourse} in ${trimmedCategory}`,
-      pathSegments: [trimmedCategory, trimmedCourse, "images", darkFilename],
+      pathSegments: [...imagePath, darkFilename],
     });
   } catch (error) {
     if (lightResult.sha) {
       try {
         await deleteContent({
           message: `Rollback drawing ${lightFilename} in ${trimmedCourse} after dark variant save failed`,
-          pathSegments: [trimmedCategory, trimmedCourse, "images", lightFilename],
+          pathSegments: [...imagePath, lightFilename],
           sha: lightResult.sha,
         });
       } catch {
@@ -525,17 +905,92 @@ export async function createOperatorDrawingAsset({
   return {
     darkFilename,
     darkSha: darkResult.sha ?? "",
-    darkUrl: rawUrl(trimmedCategory, trimmedCourse, "images", darkFilename),
+    darkUrl: article?.trim()
+      ? rawUrl(trimmedCategory, trimmedCourse, article.trim(), "images", darkFilename)
+      : rawUrl(trimmedCategory, trimmedCourse, "images", darkFilename),
     displayName: `${sharedName}.png`,
     filename: lightFilename,
     markdownPath: `images/${lightFilename}`,
     sha: lightResult.sha ?? "",
     themeManaged: true,
-    url: rawUrl(trimmedCategory, trimmedCourse, "images", lightFilename),
+    url: article?.trim()
+      ? rawUrl(trimmedCategory, trimmedCourse, article.trim(), "images", lightFilename)
+      : rawUrl(trimmedCategory, trimmedCourse, "images", lightFilename),
+  };
+}
+
+export async function createOperatorDrawingAssetByPath({
+  articlePath,
+  darkDataUrl,
+  lightDataUrl,
+  name,
+}: {
+  articlePath: string[];
+  darkDataUrl: string;
+  lightDataUrl: string;
+  name?: string;
+}) {
+  await requireOperatorAuthentication();
+  const normalizedPath = articlePath.map((segment) => segment.trim()).filter(Boolean);
+
+  if (normalizedPath.length === 0) {
+    throw new Error("Article path is required.");
+  }
+
+  const encodedLightContent = parsePngDataUrl(lightDataUrl);
+  const encodedDarkContent = parsePngDataUrl(darkDataUrl);
+  const baseName = sanitizeAssetSegment(name || "drawing") || "drawing";
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const sharedName = `${baseName}-${stamp}`;
+  const lightFilename = `${sharedName}-light.png`;
+  const darkFilename = `${sharedName}-dark.png`;
+  const imagePath = [...normalizedPath, "images"];
+
+  const lightResult = await putContent({
+    encodedContent: encodedLightContent,
+    message: `Add drawing ${lightFilename} to ${normalizedPath[normalizedPath.length - 1]}`,
+    pathSegments: [...imagePath, lightFilename],
+  });
+
+  let darkResult: Awaited<ReturnType<typeof putContent>>;
+
+  try {
+    darkResult = await putContent({
+      encodedContent: encodedDarkContent,
+      message: `Add drawing ${darkFilename} to ${normalizedPath[normalizedPath.length - 1]}`,
+      pathSegments: [...imagePath, darkFilename],
+    });
+  } catch (error) {
+    if (lightResult.sha) {
+      try {
+        await deleteContent({
+          message: `Rollback drawing ${lightFilename} after dark variant save failed`,
+          pathSegments: [...imagePath, lightFilename],
+          sha: lightResult.sha,
+        });
+      } catch {
+        // Keep the original write error; rollback is best-effort.
+      }
+    }
+
+    throw error;
+  }
+
+  return {
+    darkFilename,
+    darkSha: darkResult.sha ?? "",
+    darkUrl: rawUrl(...normalizedPath, "images", darkFilename),
+    displayName: `${sharedName}.png`,
+    filename: lightFilename,
+    markdownPath: `images/${lightFilename}`,
+    sha: lightResult.sha ?? "",
+    themeManaged: true,
+    url: rawUrl(...normalizedPath, "images", lightFilename),
   };
 }
 
 export async function deleteOperatorImageAsset({
+  article,
   category,
   course,
   darkFilename,
@@ -543,6 +998,7 @@ export async function deleteOperatorImageAsset({
   filename,
   sha,
 }: {
+  article?: string;
   category: string;
   course: string;
   darkFilename?: string;
@@ -554,6 +1010,9 @@ export async function deleteOperatorImageAsset({
   const trimmedCategory = category.trim();
   const trimmedCourse = course.trim();
   const trimmedFilename = filename.trim();
+  const imagePath = article?.trim()
+    ? [trimmedCategory, trimmedCourse, article.trim(), "images"]
+    : [trimmedCategory, trimmedCourse, "images"];
 
   if (!trimmedCategory || !trimmedCourse || !trimmedFilename || !sha) {
     throw new Error("Category, course, filename, and sha are required.");
@@ -563,12 +1022,7 @@ export async function deleteOperatorImageAsset({
     await deleteContent({
       allowMissing: true,
       message: `Delete image ${darkFilename.trim()} from ${trimmedCourse} in ${trimmedCategory}`,
-      pathSegments: [
-        trimmedCategory,
-        trimmedCourse,
-        "images",
-        darkFilename.trim(),
-      ],
+      pathSegments: [...imagePath, darkFilename.trim()],
       sha: darkSha,
     });
   }
@@ -576,7 +1030,46 @@ export async function deleteOperatorImageAsset({
   await deleteContent({
     allowMissing: true,
     message: `Delete image ${trimmedFilename} from ${trimmedCourse} in ${trimmedCategory}`,
-    pathSegments: [trimmedCategory, trimmedCourse, "images", trimmedFilename],
+    pathSegments: [...imagePath, trimmedFilename],
+    sha,
+  });
+}
+
+export async function deleteOperatorImageAssetByPath({
+  articlePath,
+  darkFilename,
+  darkSha,
+  filename,
+  sha,
+}: {
+  articlePath: string[];
+  darkFilename?: string;
+  darkSha?: string;
+  filename: string;
+  sha: string;
+}) {
+  await requireOperatorAuthentication();
+  const normalizedPath = articlePath.map((segment) => segment.trim()).filter(Boolean);
+  const trimmedFilename = filename.trim();
+  const imagePath = [...normalizedPath, "images"];
+
+  if (normalizedPath.length === 0 || !trimmedFilename || !sha) {
+    throw new Error("Article path, filename, and sha are required.");
+  }
+
+  if (darkFilename?.trim() && darkSha) {
+    await deleteContent({
+      allowMissing: true,
+      message: `Delete image ${darkFilename.trim()} from ${normalizedPath[normalizedPath.length - 1]}`,
+      pathSegments: [...imagePath, darkFilename.trim()],
+      sha: darkSha,
+    });
+  }
+
+  await deleteContent({
+    allowMissing: true,
+    message: `Delete image ${trimmedFilename} from ${normalizedPath[normalizedPath.length - 1]}`,
+    pathSegments: [...imagePath, trimmedFilename],
     sha,
   });
 }

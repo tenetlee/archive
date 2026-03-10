@@ -12,7 +12,7 @@ import {
   useState,
 } from "react";
 import { parseArticleDraft } from "@/lib/article-draft";
-import { categorySlug, courseSlug } from "@/lib/github";
+import { routeForPath } from "@/lib/github";
 import type { OperatorImageAsset } from "@/lib/operator-content";
 import { getThemeImageVariant } from "@/lib/theme-images";
 import { CollapsibleMarkdown } from "../components/collapsible-markdown";
@@ -272,15 +272,13 @@ function moveToWordEnd(text: string, index: number): number {
 }
 
 export function OperatorArticleEditor({
-  category,
-  course,
+  articlePath,
   initialAssets,
   initialRaw,
   initialSha,
   previewBaseUrl,
 }: {
-  category: string;
-  course: string;
+  articlePath: string[];
   initialAssets: OperatorImageAsset[];
   initialRaw: string;
   initialSha?: string;
@@ -312,10 +310,15 @@ export function OperatorArticleEditor({
   const preferredColumnRef = useRef<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { theme } = useTheme();
-  const parsed = useMemo(() => parseArticleDraft(raw, course), [course, raw]);
+  const articleName = articlePath[articlePath.length - 1] ?? "Untitled";
+  const articleLabel = articlePath.join(" / ");
+  const parsed = useMemo(
+    () => parseArticleDraft(raw, articleName),
+    [articleName, raw]
+  );
   const currentSha = state?.sha ?? initialSha ?? "";
-  const previewHref = `/operator/${categorySlug(category)}/${courseSlug(course)}`;
-  const publicHref = `/${categorySlug(category)}/${courseSlug(course)}`;
+  const previewHref = `/operator${routeForPath(articlePath)}`;
+  const publicHref = routeForPath(articlePath);
 
   useEffect(() => {
     function handleDocumentPointerDown(event: PointerEvent) {
@@ -436,8 +439,7 @@ export function OperatorArticleEditor({
     startTransition(async () => {
       try {
         await deleteImageAction({
-          category,
-          course,
+          articlePath,
           darkFilename: assetToDelete.darkFilename,
           darkSha: assetToDelete.darkSha,
           filename: assetToDelete.filename,
@@ -702,8 +704,7 @@ export function OperatorArticleEditor({
   return (
     <div className="border border-border bg-surface">
       <form ref={formRef} action={formAction}>
-        <input type="hidden" name="category" value={category} />
-        <input type="hidden" name="course" value={course} />
+        <input type="hidden" name="articlePath" value={articlePath.join("/")} />
         <input type="hidden" name="sha" value={currentSha} />
 
         <div className="border-b border-border px-4 py-4">
@@ -713,10 +714,10 @@ export function OperatorArticleEditor({
                 Article Editor
               </p>
               <h1 className="mt-1 text-3xl tracking-tight text-foreground">
-                {parsed.title || course}
+                {parsed.title || articleName}
               </h1>
               <p className="mt-2 text-sm text-muted">
-                {category} / {course}
+                {articleLabel}
               </p>
             </div>
 
@@ -924,7 +925,7 @@ export function OperatorArticleEditor({
                 </div>
                 <div className="px-4 py-6 lg:px-8">
                   <h1 className="mb-3 text-5xl font-normal leading-tight tracking-tight text-foreground">
-                    {parsed.title || course}
+                    {parsed.title || articleName}
                   </h1>
                   {parsed.prerequisites.length > 0 ? (
                     <p className="mb-8 text-sm leading-6 text-muted">
@@ -946,8 +947,7 @@ export function OperatorArticleEditor({
         <OperatorDrawingWindow
           key={windowState.id}
           active={windowState.id === activeDrawingWindowId}
-          category={category}
-          course={course}
+          articlePath={articlePath}
           disableSave={
             savingDrawingWindowId !== null && savingDrawingWindowId !== windowState.id
           }

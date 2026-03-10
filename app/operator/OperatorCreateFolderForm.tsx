@@ -1,67 +1,55 @@
 "use client";
 
 import { useActionState } from "react";
-import { createCourseAction, type OperatorFormState } from "./content-actions";
+import { createFolderAction, type OperatorFormState } from "./content-actions";
 
-export function OperatorCreateCourseForm({
-  categories,
-  initialCategory,
+export function OperatorCreateFolderForm({
+  parentLabel,
+  parentPath,
 }: {
-  categories: string[];
-  initialCategory?: string;
+  parentLabel: string;
+  parentPath?: string[];
 }) {
   const [state, formAction, pending] = useActionState<OperatorFormState, FormData>(
-    createCourseAction,
+    createFolderAction,
     null
   );
 
-  if (categories.length === 0) {
-    return (
-      <div className="border border-border bg-surface p-6">
-        <h1 className="text-3xl tracking-tight text-foreground">New Course</h1>
-        <p className="mt-2 text-sm leading-6 text-muted">
-          Create a category first. Courses live inside categories and create a
-          first article immediately.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <form action={formAction} className="border border-border bg-surface p-6">
+      <input
+        type="hidden"
+        name="parentPath"
+        value={(parentPath ?? []).join("/")}
+      />
+
       <div className="mb-6">
-        <h1 className="text-3xl tracking-tight text-foreground">New Course</h1>
+        <h1 className="text-3xl tracking-tight text-foreground">New Folder</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
-          This creates an empty course folder inside the selected category. Add
-          articles after the folder exists.
+          This creates an empty folder at the current location.
         </p>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <div>
           <label className="mb-2 block text-sm font-medium text-foreground">
-            Category
+            Parent folder
           </label>
-          <select
-            name="category"
-            defaultValue={initialCategory || categories[0]}
-            className="w-full border border-border bg-background px-3 py-2 text-foreground"
-          >
-            {categories.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
+          <input
+            type="text"
+            value={parentLabel}
+            disabled
+            className="w-full border border-border bg-background px-3 py-2 text-foreground disabled:opacity-100"
+          />
         </div>
 
         <div>
           <label className="mb-2 block text-sm font-medium text-foreground">
-            Course folder name
+            Folder name
           </label>
           <input
             type="text"
-            name="course"
+            name="name"
             required
             autoFocus
             placeholder="Linear Algebra"
@@ -80,7 +68,7 @@ export function OperatorCreateCourseForm({
           disabled={pending}
           className="border border-foreground bg-foreground px-4 py-2 text-sm font-medium text-background disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {pending ? "Creating..." : "Create course"}
+          {pending ? "Creating..." : "Create folder"}
         </button>
       </div>
     </form>

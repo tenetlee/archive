@@ -390,8 +390,7 @@ function ClearIcon() {
 
 export function OperatorDrawingWindow({
   active,
-  category,
-  course,
+  articlePath,
   disableSave,
   initialPosition,
   onAssetCreated,
@@ -403,8 +402,7 @@ export function OperatorDrawingWindow({
   zIndex,
 }: {
   active: boolean;
-  category: string;
-  course: string;
+  articlePath: string[];
   disableSave: boolean;
   initialPosition: { x: number; y: number };
   onAssetCreated: (asset: OperatorImageAsset) => void;
@@ -460,6 +458,7 @@ export function OperatorDrawingWindow({
   const [tool, setTool] = useState<Tool>("brush");
   const { theme } = useTheme();
   const themeRef = useRef(theme);
+  const articleLabel = articlePath.join(" / ");
   const activePreset = useMemo(
     () => CANVAS_PRESETS.find((preset) => preset.key === canvasPreset) ?? CANVAS_PRESETS[1],
     [canvasPreset]
@@ -934,8 +933,7 @@ export function OperatorDrawingWindow({
     startTransition(async () => {
       try {
         const result = await saveDrawingAction({
-          category,
-          course,
+          articlePath,
           darkDataUrl: createDarkVariantDataUrl(canvas),
           lightDataUrl: canvas.toDataURL("image/png"),
         });
@@ -1011,9 +1009,7 @@ export function OperatorDrawingWindow({
             <p className="text-xs font-semibold uppercase tracking-wider text-muted">
               Drawing Window #{windowId}
             </p>
-            <p className="text-sm text-foreground">
-              {category} / {course}
-            </p>
+            <p className="text-sm text-foreground">{articleLabel}</p>
           </div>
           <button
             type="button"

@@ -2,13 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { startTransition, useMemo, useState } from "react";
-import { FolderCard } from "../components/folder-card";
+import { FileCard } from "../components/file-card";
 import { deleteOperatorEntryAction } from "./content-actions";
 
-interface OperatorFolderItem {
-  childCount?: number;
+interface OperatorFileItem {
   href: string;
-  kind: "folder";
   name: string;
   pathSegments: string[];
 }
@@ -30,18 +28,18 @@ function TrashIcon() {
   );
 }
 
-export function OperatorFolderGrid({
+export function OperatorFileGrid({
   items,
 }: {
-  items: OperatorFolderItem[];
+  items: OperatorFileItem[];
 }) {
   const router = useRouter();
   const [confirmValue, setConfirmValue] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [deletingName, setDeletingName] = useState<string | null>(null);
-  const [draggingItem, setDraggingItem] = useState<OperatorFolderItem | null>(null);
+  const [draggingItem, setDraggingItem] = useState<OperatorFileItem | null>(null);
   const [dropActive, setDropActive] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<OperatorFolderItem | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<OperatorFileItem | null>(null);
 
   const canDelete = useMemo(
     () => pendingDelete !== null && confirmValue.trim() === pendingDelete.name,
@@ -65,14 +63,14 @@ export function OperatorFolderGrid({
     startTransition(async () => {
       try {
         await deleteOperatorEntryAction({
-          kind: "folder",
+          kind: "article",
           pathSegments: pendingDelete.pathSegments,
         });
         resetDeleteState();
         router.refresh();
       } catch (error) {
         setDeleteError(
-          error instanceof Error ? error.message : "Unable to delete item."
+          error instanceof Error ? error.message : "Unable to delete article."
         );
       } finally {
         setDeletingName(null);
@@ -85,7 +83,7 @@ export function OperatorFolderGrid({
       <div className="flex flex-wrap gap-8 p-8">
         {items.map((item) => (
           <div
-            key={`${item.kind}:${item.name}`}
+            key={item.name}
             draggable
             onDragStart={(event) => {
               event.dataTransfer.effectAllowed = "move";
@@ -99,11 +97,7 @@ export function OperatorFolderGrid({
             }}
             className="cursor-grab active:cursor-grabbing"
           >
-            <FolderCard
-              label={item.name}
-              href={item.href}
-              childCount={item.childCount}
-            />
+            <FileCard href={item.href} label={item.name} />
           </div>
         ))}
       </div>
@@ -118,9 +112,7 @@ export function OperatorFolderGrid({
             event.preventDefault();
             setDropActive(true);
           }}
-          onDragLeave={() => {
-            setDropActive(false);
-          }}
+          onDragLeave={() => setDropActive(false)}
           onDrop={(event) => {
             event.preventDefault();
             if (!draggingItem) {
@@ -149,13 +141,13 @@ export function OperatorFolderGrid({
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/25 px-4">
           <div className="w-full max-w-md border border-border bg-surface p-6 shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Delete folder
+              Delete article
             </p>
             <h2 className="mt-2 text-2xl tracking-tight text-foreground">
               {pendingDelete.name}
             </h2>
             <p className="mt-4 text-sm leading-6 text-muted">
-              This action permanently removes this folder. Type the exact name
+              This action permanently removes this article. Type the exact name
               below to confirm deletion.
             </p>
             <label className="mt-4 block text-xs font-semibold uppercase tracking-wider text-muted">

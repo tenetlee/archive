@@ -148,9 +148,8 @@ async function putContent({
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
     throw new Error(
-      `GitHub write failed with status ${response.status}: ${errorText}`
+      `GitHub write failed (status ${response.status}). Check your token permissions.`
     );
   }
 
@@ -188,9 +187,8 @@ async function deleteContent({
   }
 
   if (!response.ok) {
-    const errorText = await response.text();
     throw new Error(
-      `GitHub delete failed with status ${response.status}: ${errorText}`
+      `GitHub delete failed (status ${response.status}). Check your token permissions.`
     );
   }
 }
@@ -703,6 +701,7 @@ export async function saveOperatorArticleByPath({
 }
 
 export async function deleteOperatorCategory(category: string) {
+  await requireOperatorAuthentication();
   const trimmedCategory = category.trim();
 
   if (!trimmedCategory) {
@@ -713,6 +712,7 @@ export async function deleteOperatorCategory(category: string) {
 }
 
 export async function deleteOperatorFolderByPath(pathSegments: string[]) {
+  await requireOperatorAuthentication();
   const normalizedPath = pathSegments.map((segment) => segment.trim()).filter(Boolean);
 
   if (normalizedPath.length === 0) {
@@ -774,6 +774,7 @@ export async function deleteOperatorCourse({
   category: string;
   course: string;
 }) {
+  await requireOperatorAuthentication();
   const trimmedCategory = category.trim();
   const trimmedCourse = course.trim();
 
@@ -796,6 +797,7 @@ export async function deleteOperatorArticle({
   category: string;
   course: string;
 }) {
+  await requireOperatorAuthentication();
   const trimmedCategory = category.trim();
   const trimmedCourse = course.trim();
   const trimmedArticle = article.trim();
@@ -811,6 +813,7 @@ export async function deleteOperatorArticle({
 }
 
 export async function deleteOperatorArticleByPath(pathSegments: string[]) {
+  await requireOperatorAuthentication();
   const normalizedPath = pathSegments.map((segment) => segment.trim()).filter(Boolean);
 
   if (normalizedPath.length === 0) {
@@ -829,10 +832,17 @@ function sanitizeAssetSegment(value: string): string {
     .slice(0, 48);
 }
 
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+
 function parsePngDataUrl(dataUrl: string): string {
   const match = dataUrl.match(/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/);
   if (!match) {
     throw new Error("Drawing must be exported as a PNG image.");
+  }
+
+  const approximateBytes = Math.ceil(match[1].length * 0.75);
+  if (approximateBytes > MAX_IMAGE_BYTES) {
+    throw new Error("Drawing exceeds the 10 MB size limit.");
   }
 
   return match[1];

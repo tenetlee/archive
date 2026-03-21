@@ -153,7 +153,7 @@ export function FolderCard({
               {/* Paper layers */}
               {papers > 0 &&
                 Array.from({ length: papers }).map((_, i) => {
-                  const peekUp = papers === 1 ? 6 : 2 + i * 3;
+                  const peekUp = [6, 6, 8, 7][i] ?? 6;
                   const spreadAngle = -26 * ((i + 1) / (papers + 1));
                   return (
                     <motion.div
